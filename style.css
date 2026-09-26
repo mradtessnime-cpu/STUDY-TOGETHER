@@ -6,3 +6,5 @@
 .camera-card{margin-top:18px}.camera-status{color:#8b7180;font-weight:700;margin-bottom:12px}.camera-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:12px}.camera-tile{position:relative;background:#2b2027;border-radius:16px;overflow:hidden;min-height:180px}.camera-tile video{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#2b2027}.camera-label{position:absolute;left:10px;bottom:10px;background:rgba(255,255,255,.88);color:#7d5368;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:800}.camera-card .controls{margin-top:8px}@media(max-width:760px){.camera-grid{grid-template-columns:1fr}}
 
 .shared-goal-item{margin:8px 0;padding:11px 13px;border-radius:12px;background:#fff5fa;color:#7d5368;font-weight:700;overflow-wrap:anywhere}
+
+.camera-fallback{display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:16/10;background:linear-gradient(180deg,#fff8fc,#fcecf5);font-size:76px;animation:floaty 2.2s ease-in-out infinite}.camera-tile:has(video[style*="display: block"]) .camera-fallback{display:none}@media(max-width:760px){.camera-tile{min-height:160px}}

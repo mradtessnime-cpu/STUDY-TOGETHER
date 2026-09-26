@@ -43,7 +43,7 @@
     $('remoteState').textContent=count===1?'Waiting…':`${count} people in room`;
     $('friendNote').textContent=count===1?'Share the room link with multiple people. Everyone who joins can choose a character and appear here. ✨':`${count} people are studying together. Anyone who leaves disappears from the room. ✨`;
   }
-  function addProfile(id,profile){profiles.set(id,profile);renderMembers()}
+  function addProfile(id,profile){profiles.set(id,profile);renderMembers();const tile=document.getElementById('camera-tile-'+id);if(tile){const f=tile.querySelector('.camera-fallback');if(f)f.textContent=profile.avatar||'🐰';}}
   function removeMember(id){profiles.delete(id);renderMembers();endVoiceWith(id);const vc=videoCalls.get(id);if(vc){try{vc.close()}catch(e){}videoCalls.delete(id)}removeVideoTile(id)}
 
   function renderGoals(){
@@ -102,7 +102,7 @@
       if(cameraOn && cameraStream && !videoCalls.has(c.peer)){try{attachVideoCall(peer.call(c.peer,cameraStream,{metadata:{type:'study-camera'}}),c.peer)}catch(e){}}
     });
     c.on('data',m=>{
-      if(m.type==='profile'&&m.peerId){addProfile(m.peerId,m.profile);broadcast({type:'profile',profile:m.profile,peerId:m.peerId},m.peerId);sendRoster();}
+      if(m.type==='profile'&&m.peerId){addProfile(m.peerId,m.profile);}
       if(m.type==='roster'){handleRoster(m.members||[]);mergeGoals(m.goals||[]);}
       if(m.type==='request-roster'){c.send({type:'roster',members:[{id:myPeerId,profile:me},...Array.from(profiles.entries()).map(([id,profile])=>({id,profile}))]});c.send({type:'chat-history',messages:chatHistory});}
       if(m.type==='chat'){addMessage(m.text,false,m.from||'friend',m.id);}
@@ -127,11 +127,19 @@
     if(!tile){
       tile=document.createElement('div');tile.className='camera-tile';tile.id='camera-tile-'+id;
       const v=document.createElement('video');v.autoplay=true;v.playsInline=true;v.muted=!!isLocal;
+      const fallback=document.createElement('div');fallback.className='camera-fallback';fallback.textContent=(profiles.get(id)||{}).avatar||'🐰';
       const l=document.createElement('div');l.className='camera-label';l.textContent=label;
-      tile.appendChild(v);tile.appendChild(l);grid.appendChild(tile);
+      tile.appendChild(v);tile.appendChild(fallback);tile.appendChild(l);grid.appendChild(tile);
     }
+    const prof=profiles.get(id);
+    const fallback=tile.querySelector('.camera-fallback');
+    if(fallback)fallback.textContent=prof?prof.avatar:(id===myPeerId?me.avatar:'🐰');
+    const l=tile.querySelector('.camera-label'); if(l)l.textContent=label;
     const v=tile.querySelector('video');
-    if(v){v.srcObject=stream;v.muted=!!isLocal;v.play().catch(()=>{});}
+    if(v){
+      if(stream){v.srcObject=stream;v.style.display='block';if(fallback)fallback.style.display='none';v.muted=!!isLocal;v.play().catch(()=>{});}
+      else {v.srcObject=null;v.style.display='none';if(fallback)fallback.style.display='flex';}
+    }
   }
   function attachVideoCall(call,remoteId){
     if(!call||!remoteId)return;
@@ -143,9 +151,12 @@
     call.on('error',()=>{videoCalls.delete(remoteId);removeVideoTile(remoteId);setCameraStatus('Camera connection failed. You can try again.')});
   }
   function answerCameraCall(call){
-    if(!cameraStream){try{call.close()}catch(e){}return}
-    call.answer(cameraStream);
-    attachVideoCall(call,call.peer);
+    if(!call)return;
+    try{
+      const answerStream=cameraStream||new MediaStream();
+      call.answer(answerStream);
+      attachVideoCall(call,call.peer);
+    }catch(e){try{call.close()}catch(err){}setCameraStatus('Camera connection failed. Please try again.')}
   }
   async function startCamera(){
     if(cameraOn)return;
@@ -166,7 +177,8 @@
     cameraOn=false;
     videoCalls.forEach(c=>{try{c.close()}catch(e){}});videoCalls.clear();
     if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}
-    document.querySelectorAll('#cameraGrid .camera-tile').forEach(e=>e.remove());
+    const mine=document.getElementById('camera-tile-'+myPeerId); if(mine)mine.remove();
+    document.querySelectorAll('#cameraGrid .camera-tile').forEach(e=>{const id=e.id.replace('camera-tile-','');if(id===myPeerId)e.remove();});
     $('cameraStart').classList.remove('hidden');$('cameraStop').classList.add('hidden');
     setCameraStatus('Camera off · your character stays visible ♡');
   }
