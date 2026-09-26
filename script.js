@@ -60,12 +60,12 @@
     if(!c||!c.peer)return;
     dataConns.set(c.peer,c);
     c.on('open',()=>{
+      dataConns.set(c.peer,c);
       c.send({type:'profile',profile:me,peerId:myPeerId});
-      sendRoster();
-      // Ask the newly connected peer for the current room list.
+      c.send({type:'roster',members:[{id:myPeerId,profile:me},...Array.from(profiles.entries()).map(([id,profile])=>({id,profile}))]});
       c.send({type:'request-roster'});
-      setStatus(`Connected · ${dataConns.size} connection${dataConns.size===1?'':'s'}`);
-      say('You are studying together! Everyone in the room can see the characters.');
+      setStatus(`🟢 Connected · ${dataConns.size} connection${dataConns.size===1?'':'s'}`);
+      say('🟢 Connected! Everyone in this room can see each other.');
       connectMeshTo(c.peer);
     });
     c.on('data',m=>{
@@ -114,18 +114,47 @@
   $('voiceEnd').onclick=endAllVoice;
 
   function createPeer(hostId){
-    peer=new Peer(hostId);
-    peer.on('open',id=>{myPeerId=id;setStatus('Room ready');renderMembers();say('Room created. Copy the room link and send it to everyone you want to study with.');});
+    if(peer){try{peer.destroy()}catch(e){}}
+    peer=new Peer(hostId,{debug:1});
+    peer.on('open',id=>{
+      myPeerId=id;
+      setStatus('🟢 Room online');
+      renderMembers();
+      say('Room is online! Copy the link and send it to your friends.');
+    });
     peer.on('connection',wireData);
-    peer.on('call',async call=>{try{const stream=await getMic();call.answer(stream);attachVoiceCall(call,call.peer)}catch(e){setVoiceStatus('Someone is calling, but microphone permission was not granted.')}});
-    peer.on('error',e=>{say('The room connection failed. Try creating a new room.');setStatus('Connection error')});
+    peer.on('disconnected',()=>{setStatus('Reconnecting…');try{peer.reconnect()}catch(e){}});
+    peer.on('call',async call=>{
+      try{const stream=await getMic();call.answer(stream);attachVoiceCall(call,call.peer)}
+      catch(e){setVoiceStatus('Someone is calling, but microphone permission was not granted.')}
+    });
+    peer.on('error',e=>{
+      console.error(e);
+      setStatus('Connection error');
+      say(e&&e.type==='unavailable-id'?'This room is already active. Create a new room.':'Could not connect to the room service. Refresh and try again.');
+    });
   }
   function joinPeer(id){
-    peer=new Peer();
-    peer.on('open',id2=>{myPeerId=id2;renderMembers();wireData(peer.connect(roomPeerId(id),{reliable:true}))});
+    if(peer){try{peer.destroy()}catch(e){}}
+    peer=new Peer(undefined,{debug:1});
+    peer.on('open',id2=>{
+      myPeerId=id2;
+      renderMembers();
+      say('Joining room…');
+      const c=peer.connect(roomPeerId(id),{reliable:true});
+      wireData(c);
+      c.on('open',()=>{setStatus('🟢 Joined room');say('🟢 You joined the room! Your friend should see you now.')});
+      setTimeout(()=>{
+        if(!c.open){setStatus('Could not join room');say('The host may have closed the room. Ask them to keep the room page open and send the link again.')}
+      },10000);
+    });
     peer.on('connection',wireData);
-    peer.on('call',async call=>{try{const stream=await getMic();call.answer(stream);attachVoiceCall(call,call.peer)}catch(e){setVoiceStatus('Someone is calling, but microphone permission was not granted.')}});
-    peer.on('error',()=>say('Could not join the room. Check the room link/code and try again.'));
+    peer.on('disconnected',()=>{setStatus('Reconnecting…');try{peer.reconnect()}catch(e){}});
+    peer.on('call',async call=>{
+      try{const stream=await getMic();call.answer(stream);attachVoiceCall(call,call.peer)}
+      catch(e){setVoiceStatus('Someone is calling, but microphone permission was not granted.')}
+    });
+    peer.on('error',e=>{console.error(e);setStatus('Could not join room');say('Could not join this room. Make sure the host has the room open.')});
   }
   $('createRoom').onclick=()=>{role='host';showRoom(randomRoom());createPeer(roomPeerId(roomId));};
   $('joinRoom').onclick=()=>{const id=$('roomCode').value.trim().toUpperCase();if(!id){say('Enter the room code first.');return}role='guest';showRoom(id);joinPeer(id)};

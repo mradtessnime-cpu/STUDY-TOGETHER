@@ -14,3 +14,7 @@ A GitHub Pages-ready study room with animated characters, multi-person rooms, pr
 - GitHub Pages provides HTTPS, which is required for microphone access.
 - Each participant must allow microphone permission to use group voice.
 - The group voice is peer-to-peer mesh, so every participant connects directly to the others. Very large rooms may use more bandwidth than small rooms.
+
+
+## Room fix
+This version improves room joining, participant presence, reconnection, and roster exchange while keeping the existing design.
