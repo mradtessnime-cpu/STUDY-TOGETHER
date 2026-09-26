@@ -11,7 +11,7 @@
   <header class="hero">
     <div>
       <div class="badge">🌷 STUDY TOGETHER</div>
-      <h1>Study with your friend ♡</h1>
+      <h1>Study together ♡</h1>
       <p>Choose a cute animated character and study together ♡</p>
     </div>
     <div class="status" id="connectionStatus">Not connected</div>
@@ -19,7 +19,7 @@
 
   <section class="card room-card">
     <h2>🔗 Your private room</h2>
-    <p class="muted">Create a room, then send the room code to your friend.</p>
+    <p class="muted">Create a room, then send the room code to everyone you want to study with.</p>
     <div class="row">
       <button class="primary" id="createRoom">Create room</button>
       <input id="roomCode" placeholder="Room code" autocomplete="off">
@@ -52,22 +52,18 @@
       </div>
     </div>
     <div class="card avatar-card friend-avatar-card">
-      <div class="video-title"><span>💗 Your friend</span><span id="remoteState">Waiting…</span></div>
-      <div class="avatar-stage friend-stage" id="friendStage">
-        <div class="avatar-bubble waiting" id="friendAvatar">♡</div>
-        <div class="avatar-name" id="friendAvatarName">Waiting for your friend…</div>
-        <div class="avatar-sparkles">✦ ✧ ✦</div>
-      </div>
-      <p class="friend-note" id="friendNote">When your friend joins and chooses a character, it appears here. When they leave, it disappears. ✨</p>
+      <div class="video-title"><span>💗 Study room members</span><span id="remoteState">Waiting…</span></div>
+      <div class="members-grid" id="membersGrid"></div>
+      <p class="friend-note" id="friendNote">Share the room link with multiple people. Everyone who joins can choose a character and appear here. ✨</p>
     </div>
   </section>
 
   <section class="card voice-card">
     <h2>🎙️ Voice call</h2>
-    <p class="muted">Talk to your friend without using the camera.</p>
+    <p class="muted">Talk with everyone in the room using voice — no camera needed.</p>
     <div class="voice-status" id="voiceStatus">Voice call not started</div>
     <div class="controls">
-      <button class="primary" id="voiceCall">📞 Call friend</button>
+      <button class="primary" id="voiceCall">📞 Start group voice</button>
       <button class="secondary" id="voiceMute">🔇 Mute mic</button>
       <button class="danger hidden" id="voiceEnd">📴 End call</button>
     </div>

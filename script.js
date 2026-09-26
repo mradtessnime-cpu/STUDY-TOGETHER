@@ -2,8 +2,11 @@
   const $=id=>document.getElementById(id);
   const params=new URLSearchParams(location.search);
   let roomId=params.get('room')||'';
-  let peer=null, conn=null, role='';
-  let voiceCall=null, localStream=null, micMuted=false;
+  let peer=null, role='', myPeerId='';
+  const dataConns=new Map();
+  const profiles=new Map();
+  const voiceCalls=new Map();
+  let localStream=null, micMuted=false;
   let me={avatar:'🐰',name:'Bunny'};
   let timerRunning=false,timerEndMs=0,timerRemainingMs=0,timerInterval=null;
 
@@ -17,87 +20,122 @@
   function updateMine(){
     $('myAvatar').textContent=me.avatar;$('myAvatarName').textContent='You · '+me.name;
     document.querySelectorAll('#avatarOptions button').forEach(b=>b.classList.toggle('selected',b.dataset.avatar===me.avatar));
-    if(conn&&conn.open) conn.send({type:'profile',profile:me});
+    broadcast({type:'profile',profile:me,peerId:myPeerId});
   }
   document.querySelectorAll('#avatarOptions button').forEach(b=>b.onclick=()=>{me={avatar:b.dataset.avatar,name:b.dataset.name};updateMine()});
 
-  function showFriend(profile){
-    $('friendAvatar').textContent=profile.avatar;$('friendAvatar').classList.remove('waiting');$('friendAvatarName').textContent=profile.name;
-    $('remoteState').textContent='Studying with you ♡';$('friendNote').textContent='Your friend is here ✨';
+  function memberCard(id,profile,isMe=false){
+    const el=document.createElement('div');el.className='member-card';el.dataset.peer=id;
+    el.innerHTML=`<div class="member-avatar">${profile.avatar}</div><div class="member-name">${isMe?'You · ':''}${escapeHtml(profile.name)}</div><div class="member-state">${isMe?'You':'Studying ♡'}</div>`;
+    return el;
   }
-  function friendLeft(){
-    $('friendAvatar').textContent='♡';$('friendAvatar').classList.add('waiting');$('friendAvatarName').textContent='Waiting for your friend…';$('remoteState').textContent='Waiting…';$('friendNote').textContent='When your friend joins and chooses a character, it appears here. When they leave, it disappears. ✨';
+  function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+  function renderMembers(){
+    const grid=$('membersGrid');grid.innerHTML='';
+    grid.appendChild(memberCard(myPeerId,me,true));
+    profiles.forEach((p,id)=>grid.appendChild(memberCard(id,p,false)));
+    const count=profiles.size+1;
+    $('remoteState').textContent=count===1?'Waiting…':`${count} people in room`;
+    $('friendNote').textContent=count===1?'Share the room link with multiple people. Everyone who joins can choose a character and appear here. ✨':`${count} people are studying together. Anyone who leaves disappears from the room. ✨`;
   }
-  function wire(c){
-    conn=c;conn.on('open',()=>{setStatus('Friend connected ♡');$('remoteState').textContent='Connected';conn.send({type:'profile',profile:me});say('You are studying together! Your characters are visible to each other.');});
-    conn.on('data',m=>{if(m.type==='profile')showFriend(m.profile);if(m.type==='chat')addMessage(m.text,false);if(m.type==='goal')$('goalDisplay').textContent='🎯 '+m.text});
-    conn.on('close',()=>{conn=null;setStatus('Friend left');friendLeft();say('Your friend left the room. Their character disappeared.');});
-    conn.on('error',()=>say('Connection problem. Ask your friend to reopen the room link.'));
+  function addProfile(id,profile){profiles.set(id,profile);renderMembers()}
+  function removeMember(id){profiles.delete(id);renderMembers();endVoiceWith(id)}
+
+  function allConns(){return [...dataConns.values()].filter(c=>c&&c.open)}
+  function broadcast(msg,exceptId=''){allConns().forEach(c=>{if(c.peer!==exceptId)try{c.send(msg)}catch(e){}})}
+  function sendRoster(){
+    const list=[{id:myPeerId,profile:me}];profiles.forEach((p,id)=>list.push({id,profile:p}));
+    broadcast({type:'roster',members:list});
   }
+  function connectMeshTo(id){
+    if(!peer||!id||id===myPeerId||dataConns.has(id))return;
+    const c=peer.connect(id,{reliable:true});wireData(c);
+  }
+  function handleRoster(list){
+    list.forEach(m=>{if(m.id!==myPeerId && m.profile)addProfile(m.id,m.profile)});
+    list.forEach(m=>{if(m.id!==myPeerId)connectMeshTo(m.id)});
+  }
+
+  function wireData(c){
+    if(!c||!c.peer)return;
+    dataConns.set(c.peer,c);
+    c.on('open',()=>{
+      c.send({type:'profile',profile:me,peerId:myPeerId});
+      sendRoster();
+      // Ask the newly connected peer for the current room list.
+      c.send({type:'request-roster'});
+      setStatus(`Connected · ${dataConns.size} connection${dataConns.size===1?'':'s'}`);
+      say('You are studying together! Everyone in the room can see the characters.');
+      connectMeshTo(c.peer);
+    });
+    c.on('data',m=>{
+      if(m.type==='profile'&&m.peerId){addProfile(m.peerId,m.profile);broadcast({type:'profile',profile:m.profile,peerId:m.peerId},m.peerId);sendRoster();}
+      if(m.type==='roster')handleRoster(m.members||[]);
+      if(m.type==='request-roster'){c.send({type:'roster',members:[{id:myPeerId,profile:me},...Array.from(profiles.entries()).map(([id,profile])=>({id,profile}))]});}
+      if(m.type==='chat')addMessage(m.text,false);
+      if(m.type==='goal')$('goalDisplay').textContent='🎯 '+m.text;
+    });
+    c.on('close',()=>{dataConns.delete(c.peer);removeMember(c.peer);setStatus(dataConns.size?`Connected · ${dataConns.size} connection${dataConns.size===1?'':'s'}`:'Room ready');say('Someone left the room. Their character and voice connection disappeared.');});
+    c.on('error',()=>dataConns.delete(c.peer));
+  }
+
   async function getMic(){
-    if(localStream) return localStream;
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-      throw new Error('Microphone is not supported here.');
-    }
+    if(localStream)return localStream;
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Microphone is not supported here.');
     localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
     return localStream;
   }
   function setVoiceStatus(t){$('voiceStatus').textContent=t}
   function showEndButton(on){$('voiceEnd').classList.toggle('hidden',!on)}
   function stopVoiceTracks(){if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null}}
-  function endVoice(){
-    if(voiceCall){try{voiceCall.close()}catch(e){} voiceCall=null}
-    const a=$('remoteAudio');if(a){a.srcObject=null;a.pause()}
-    stopVoiceTracks();micMuted=false;$('voiceMute').textContent='🔇 Mute mic';showEndButton(false);
-    setVoiceStatus(conn&&conn.open?'Connected — voice call ended':'Voice call ended');
+  function endVoiceWith(id){const call=voiceCalls.get(id);if(call){try{call.close()}catch(e){}voiceCalls.delete(id)}}
+  function endAllVoice(){voiceCalls.forEach(c=>{try{c.close()}catch(e){}});voiceCalls.clear();document.querySelectorAll('.remote-audio').forEach(a=>{a.srcObject=null;a.remove()});stopVoiceTracks();micMuted=false;$('voiceMute').textContent='🔇 Mute mic';showEndButton(false);setVoiceStatus(dataConns.size?'Group voice ended':'Voice call not started')}
+  function attachVoiceCall(call,remoteId){
+    if(voiceCalls.has(remoteId)){try{voiceCalls.get(remoteId).close()}catch(e){}}
+    voiceCalls.set(remoteId,call);showEndButton(true);setVoiceStatus(`🟢 Group voice · ${voiceCalls.size} connected`);
+    let a=document.getElementById('audio-'+remoteId);
+    if(!a){a=document.createElement('audio');a.id='audio-'+remoteId;a.className='remote-audio';a.autoplay=true;a.playsInline=true;document.body.appendChild(a)}
+    call.on('stream',stream=>{a.srcObject=stream;a.play().catch(()=>{});setVoiceStatus(`🟢 Group voice · ${voiceCalls.size} connected`)});
+    call.on('close',()=>{voiceCalls.delete(remoteId);if(a){a.srcObject=null;a.remove()}setVoiceStatus(voiceCalls.size?`🟢 Group voice · ${voiceCalls.size} connected`:'Voice call ended');if(!voiceCalls.size)showEndButton(false)});
+    call.on('error',()=>{voiceCalls.delete(remoteId);setVoiceStatus('A voice connection failed. The others can stay connected.')});
   }
-  function attachVoiceCall(call){
-    voiceCall=call;showEndButton(true);setVoiceStatus('Connecting voice call…');
-    call.on('stream',stream=>{const a=$('remoteAudio');a.srcObject=stream;a.play().catch(()=>{});setVoiceStatus('🟢 Voice call connected')});
-    call.on('close',()=>{if(voiceCall===call)endVoice()});
-    call.on('error',()=>{if(voiceCall===call){setVoiceStatus('Voice call connection failed');showEndButton(false)}});
-  }
-  async function callFriend(){
-    if(!peer||!conn||!conn.open){setVoiceStatus('Join the same room first.');return}
+  async function startGroupVoice(){
+    if(!peer||!myPeerId||!dataConns.size){setVoiceStatus('Join the same room first.');return}
     try{
-      const stream=await getMic();
-      micMuted=false;$('voiceMute').textContent='🔇 Mute mic';
-      const remoteId=conn.peer;
-      const call=peer.call(remoteId,stream,{metadata:{type:'study-voice'}});
-      attachVoiceCall(call);
+      await getMic();micMuted=false;$('voiceMute').textContent='🔇 Mute mic';
+      const ids=[...profiles.keys()].filter(id=>id!==myPeerId);
+      ids.forEach(id=>{if(!voiceCalls.has(id)){try{attachVoiceCall(peer.call(id,localStream,{metadata:{type:'study-voice'}}),id)}catch(e){}}});
+      setVoiceStatus(ids.length?`🟢 Group voice · connecting to ${ids.length} people`:'No other members are connected yet.');
+      showEndButton(ids.length>0);
     }catch(e){setVoiceStatus('Microphone permission was not granted.')}
   }
-  $('voiceCall').onclick=callFriend;
-  $('voiceMute').onclick=()=>{
-    if(!localStream){setVoiceStatus('Start the voice call first.');return}
-    micMuted=!micMuted;localStream.getAudioTracks().forEach(t=>t.enabled=!micMuted);
-    $('voiceMute').textContent=micMuted?'🎙️ Unmute mic':'🔇 Mute mic';
-    setVoiceStatus(micMuted?'🔴 Microphone muted':'🟢 Voice call connected');
-  };
-  $('voiceEnd').onclick=endVoice;
+  $('voiceCall').onclick=startGroupVoice;
+  $('voiceMute').onclick=()=>{if(!localStream){setVoiceStatus('Start the group voice call first.');return}micMuted=!micMuted;localStream.getAudioTracks().forEach(t=>t.enabled=!micMuted);$('voiceMute').textContent=micMuted?'🎙️ Unmute mic':'🔇 Mute mic';setVoiceStatus(micMuted?'🔴 Microphone muted':`🟢 Group voice · ${voiceCalls.size} connected`)};
+  $('voiceEnd').onclick=endAllVoice;
 
   function createPeer(hostId){
     peer=new Peer(hostId);
-    peer.on('open',()=>{setStatus('Room ready');say('Room created. Copy the room link and send it to your friend.');});
-    peer.on('connection',wire);
-    peer.on('call',async call=>{
-      try{const stream=await getMic();call.answer(stream);attachVoiceCall(call)}catch(e){setVoiceStatus('Your friend is calling, but microphone permission was not granted.')}});
-    peer.on('error',e=>{say('This room is already in use or the connection failed. Create a new room.');setStatus('Connection error')});
+    peer.on('open',id=>{myPeerId=id;setStatus('Room ready');renderMembers();say('Room created. Copy the room link and send it to everyone you want to study with.');});
+    peer.on('connection',wireData);
+    peer.on('call',async call=>{try{const stream=await getMic();call.answer(stream);attachVoiceCall(call,call.peer)}catch(e){setVoiceStatus('Someone is calling, but microphone permission was not granted.')}});
+    peer.on('error',e=>{say('The room connection failed. Try creating a new room.');setStatus('Connection error')});
   }
   function joinPeer(id){
     peer=new Peer();
-    peer.on('open',()=>{wire(peer.connect(roomPeerId(id),{reliable:true}))});
+    peer.on('open',id2=>{myPeerId=id2;renderMembers();wireData(peer.connect(roomPeerId(id),{reliable:true}))});
+    peer.on('connection',wireData);
+    peer.on('call',async call=>{try{const stream=await getMic();call.answer(stream);attachVoiceCall(call,call.peer)}catch(e){setVoiceStatus('Someone is calling, but microphone permission was not granted.')}});
     peer.on('error',()=>say('Could not join the room. Check the room link/code and try again.'));
   }
   $('createRoom').onclick=()=>{role='host';showRoom(randomRoom());createPeer(roomPeerId(roomId));};
   $('joinRoom').onclick=()=>{const id=$('roomCode').value.trim().toUpperCase();if(!id){say('Enter the room code first.');return}role='guest';showRoom(id);joinPeer(id)};
   $('copyLink').onclick=async()=>{try{await navigator.clipboard.writeText($('shareLink').value);say('Room link copied ♡')}catch{$('shareLink').select();document.execCommand('copy');say('Room link copied ♡')}};
-  if(roomId){roomId=roomId.toUpperCase();showRoom(roomId);say('Room link opened. Choose your character, then wait for your friend.');joinPeer(roomId)}
+  if(roomId){roomId=roomId.toUpperCase();showRoom(roomId);say('Room link opened. Choose your character, then wait for the others.');joinPeer(roomId)}
 
   function addMessage(text,meMsg){const e=document.createElement('div');e.className='msg'+(meMsg?' me':'');e.textContent=text;$('chat').appendChild(e);$('chat').scrollTop=$('chat').scrollHeight}
-  function sendChat(){const text=$('chatInput').value.trim();if(!text)return;addMessage(text,true);if(conn&&conn.open)conn.send({type:'chat',text});$('chatInput').value=''}
+  function sendChat(){const text=$('chatInput').value.trim();if(!text)return;addMessage(text,true);broadcast({type:'chat',text});$('chatInput').value=''}
   $('sendChat').onclick=sendChat;$('chatInput').onkeydown=e=>{if(e.key==='Enter')sendChat()};
-  $('saveGoal').onclick=()=>{const text=$('goalInput').value.trim();if(!text)return;$('goalDisplay').textContent='🎯 '+text;if(conn&&conn.open)conn.send({type:'goal',text})};
+  $('saveGoal').onclick=()=>{const text=$('goalInput').value.trim();if(!text)return;$('goalDisplay').textContent='🎯 '+text;broadcast({type:'goal',text})};
 
   function parse(v){const [h,m]=v.split(':').map(Number);return(h*60+m)*60000}
   function dur(){let d=parse($('endTime').value)-parse($('startTime').value);if(d<=0)d+=86400000;return d}
@@ -108,6 +146,6 @@
   $('timerPause').onclick=()=>{if(!timerRunning)return;timerRemainingMs=Math.max(0,timerEndMs-Date.now());timerRunning=false;clearInterval(timerInterval);$('timerStatus').textContent='Paused';$('timer').textContent=fmt(timerRemainingMs)};
   $('timerReset').onclick=()=>{timerRunning=false;clearInterval(timerInterval);timerRemainingMs=dur();$('timerStatus').textContent='Ready ♡';$('timer').textContent=fmt(timerRemainingMs)};
   function tick(){timerRemainingMs=Math.max(0,timerEndMs-Date.now());$('timer').textContent=fmt(timerRemainingMs);if(timerRemainingMs<=0){timerRunning=false;clearInterval(timerInterval);$('timerStatus').textContent='Finished ♡'}}
-  $('leaveRoom').onclick=()=>{endVoice();if(conn)conn.close();if(peer)peer.destroy();friendLeft();location.href=location.pathname};
-  renderDur();updateMine();
+  $('leaveRoom').onclick=()=>{endAllVoice();dataConns.forEach(c=>{try{c.close()}catch(e){}});if(peer)peer.destroy();profiles.clear();location.href=location.pathname};
+  renderDur();renderMembers();updateMine();
 })();

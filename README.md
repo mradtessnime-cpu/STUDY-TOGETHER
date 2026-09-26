@@ -1,16 +1,16 @@
-# Study Together — Animated Characters
+# Study Together — Multi-Person Voice Room
 
-This version replaces the camera/video area with cute animated study characters.
+A GitHub Pages-ready study room with animated characters, multi-person rooms, private chat, shared goal, adjustable focus timer, and group voice calling.
 
-- Choose Bunny, Kitty, Bear, Panda, Fox, Frog, Unicorn or Koala.
-- Your friend sees your selected character.
-- You see your friend's selected character.
-- Characters gently float/animate.
-- When someone leaves the room, their character disappears.
-- Uses PeerJS/WebRTC data connections for the room's live character/chat state.
-- Works as a static GitHub Pages site over HTTPS.
+## How it works
+1. One person creates a room.
+2. Copy the room link and send it to as many friends as you want.
+3. Everyone opens the same link and chooses a character.
+4. All participants appear in the room together.
+5. Start group voice to talk with everyone without a camera.
 
-## GitHub Pages
-Upload `index.html`, `style.css`, `script.js`, and `.nojekyll` to a repository root, then enable GitHub Pages from the `main` branch and root folder.
-
-The page uses the PeerJS browser library from unpkg. Both people need an internet connection.
+## Important
+- Host rooms use PeerJS/WebRTC and require an internet connection.
+- GitHub Pages provides HTTPS, which is required for microphone access.
+- Each participant must allow microphone permission to use group voice.
+- The group voice is peer-to-peer mesh, so every participant connects directly to the others. Very large rooms may use more bandwidth than small rooms.
