@@ -70,6 +70,17 @@
     <audio id="remoteAudio" autoplay playsinline></audio>
   </section>
 
+  <section class="card camera-card">
+    <h2>📹 Camera study call</h2>
+    <p class="muted">Turn your camera on when you want to see each other. Camera off keeps your cute character.</p>
+    <div class="camera-status" id="cameraStatus">Camera off · your character stays visible ♡</div>
+    <div class="camera-grid" id="cameraGrid"></div>
+    <div class="controls">
+      <button class="primary" id="cameraStart">📹 Turn camera on</button>
+      <button class="secondary hidden" id="cameraStop">📵 Turn camera off</button>
+    </div>
+  </section>
+
   <section class="two-col">
     <div class="card">
       <h2>⏱️ Shared focus timer</h2>
@@ -106,7 +117,7 @@
 
   <footer>
     <button class="danger" id="leaveRoom">Leave room</button>
-    <p>Voice calling uses your microphone only. Your browser will ask for permission.</p>
+    <p>Voice and camera use your browser permissions. You can turn either one off anytime.</p>
   </footer>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
