@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Study Together ♡</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="app">
+  <header class="hero">
+    <div>
+      <div class="badge">🌷 STUDY TOGETHER</div>
+      <h1>Study with your friend ♡</h1>
+      <p>Choose a cute animated character and study together ♡</p>
+    </div>
+    <div class="status" id="connectionStatus">Not connected</div>
+  </header>
+
+  <section class="card room-card">
+    <h2>🔗 Your private room</h2>
+    <p class="muted">Create a room, then send the room code to your friend.</p>
+    <div class="row">
+      <button class="primary" id="createRoom">Create room</button>
+      <input id="roomCode" placeholder="Room code" autocomplete="off">
+      <button class="secondary" id="joinRoom">Join room</button>
+    </div>
+    <div class="share-row hidden" id="shareRow">
+      <input id="shareLink" readonly>
+      <button class="secondary" id="copyLink">Copy link</button>
+    </div>
+    <p class="hint" id="roomHint"></p>
+  </section>
+
+  <section class="avatar-area">
+    <div class="card avatar-card">
+      <div class="video-title"><span>🌷 Choose your study character</span><span id="avatarConnection">Not in a room</span></div>
+      <div class="avatar-stage">
+        <div class="avatar-bubble" id="myAvatar">🐰</div>
+        <div class="avatar-name" id="myAvatarName">You</div>
+        <div class="avatar-sparkles">✦ ✧ ✦</div>
+      </div>
+      <div class="avatar-options" id="avatarOptions">
+        <button data-avatar="🐰" data-name="Bunny">🐰<small>Bunny</small></button>
+        <button data-avatar="🐱" data-name="Kitty">🐱<small>Kitty</small></button>
+        <button data-avatar="🐻" data-name="Bear">🐻<small>Bear</small></button>
+        <button data-avatar="🐼" data-name="Panda">🐼<small>Panda</small></button>
+        <button data-avatar="🦊" data-name="Fox">🦊<small>Fox</small></button>
+        <button data-avatar="🐸" data-name="Frog">🐸<small>Frog</small></button>
+        <button data-avatar="🦄" data-name="Unicorn">🦄<small>Unicorn</small></button>
+        <button data-avatar="🐨" data-name="Koala">🐨<small>Koala</small></button>
+      </div>
+    </div>
+    <div class="card avatar-card friend-avatar-card">
+      <div class="video-title"><span>💗 Your friend</span><span id="remoteState">Waiting…</span></div>
+      <div class="avatar-stage friend-stage" id="friendStage">
+        <div class="avatar-bubble waiting" id="friendAvatar">♡</div>
+        <div class="avatar-name" id="friendAvatarName">Waiting for your friend…</div>
+        <div class="avatar-sparkles">✦ ✧ ✦</div>
+      </div>
+      <p class="friend-note" id="friendNote">When your friend joins and chooses a character, it appears here. When they leave, it disappears. ✨</p>
+    </div>
+  </section>
+
+  <section class="card voice-card">
+    <h2>🎙️ Voice call</h2>
+    <p class="muted">Talk to your friend without using the camera.</p>
+    <div class="voice-status" id="voiceStatus">Voice call not started</div>
+    <div class="controls">
+      <button class="primary" id="voiceCall">📞 Call friend</button>
+      <button class="secondary" id="voiceMute">🔇 Mute mic</button>
+      <button class="danger hidden" id="voiceEnd">📴 End call</button>
+    </div>
+    <audio id="remoteAudio" autoplay playsinline></audio>
+  </section>
+
+  <section class="two-col">
+    <div class="card">
+      <h2>⏱️ Shared focus timer</h2>
+      <div class="time-row">
+        <label>Start <input id="startTime" type="time" value="16:00"></label>
+        <label>End <input id="endTime" type="time" value="19:00"></label>
+      </div>
+      <div class="duration" id="duration">Duration: 3h 00m</div>
+      <div class="timer" id="timer">03:00:00</div>
+      <div class="timer-status" id="timerStatus">Ready ♡</div>
+      <div class="controls">
+        <button class="primary" id="timerStart">Start</button>
+        <button class="secondary" id="timerPause">Pause</button>
+        <button class="secondary" id="timerReset">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🎯 Shared goal</h2>
+      <input class="full" id="goalInput" placeholder="Example: Finish chapter 3">
+      <button class="primary full" id="saveGoal">Save shared goal</button>
+      <div class="goal" id="goalDisplay">No shared goal yet ♡</div>
+    </div>
+  </section>
+
+  <section class="card chat-card">
+    <h2>💬 Private room chat</h2>
+    <div class="chat" id="chat"></div>
+    <div class="row">
+      <input id="chatInput" placeholder="Write a message…" autocomplete="off">
+      <button class="primary" id="sendChat">Send</button>
+    </div>
+  </section>
+
+  <footer>
+    <button class="danger" id="leaveRoom">Leave room</button>
+    <p>Voice calling uses your microphone only. Your browser will ask for permission.</p>
+  </footer>
+</main>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
