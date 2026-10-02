@@ -8,3 +8,6 @@
 .shared-goal-item{margin:8px 0;padding:11px 13px;border-radius:12px;background:#fff5fa;color:#7d5368;font-weight:700;overflow-wrap:anywhere}
 
 .camera-fallback{display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:16/10;background:linear-gradient(180deg,#fff8fc,#fcecf5);font-size:76px;animation:floaty 2.2s ease-in-out infinite}.camera-tile:has(video[style*="display: block"]) .camera-fallback{display:none}@media(max-width:760px){.camera-tile{min-height:160px}}
+.shared-goal-item{display:flex;align-items:center;gap:10px;cursor:pointer}
+.shared-goal-item input[type="checkbox"]{width:19px;height:19px;flex:0 0 19px;accent-color:#d66b9d;cursor:pointer}
+.shared-goal-item.completed span{text-decoration:line-through;opacity:.58}

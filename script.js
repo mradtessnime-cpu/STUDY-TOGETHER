@@ -52,11 +52,13 @@
     box.innerHTML='';
     if(!sharedGoals.length){box.textContent='No shared goals yet ♡';return}
     sharedGoals.forEach(g=>{
-      const e=document.createElement('div');
-      e.className='shared-goal-item';
+      const e=document.createElement('label');
+      e.className='shared-goal-item'+(g.completed?' completed':'');
       e.dataset.goalId=g.id;
-      e.textContent='🎯 '+g.text;
-      box.appendChild(e);
+      const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!g.completed;cb.setAttribute('aria-label','Mark goal complete');
+      cb.addEventListener('change',()=>{g.completed=cb.checked;renderGoals();broadcast({type:'goal-update',id:g.id,completed:g.completed,from:myPeerId});});
+      const t=document.createElement('span');t.textContent='🎯 '+g.text;
+      e.append(cb,t);box.appendChild(e);
     });
   }
   function addGoal(text,id,from='friend',broadcastIt=false){
@@ -64,14 +66,15 @@
     if(!text)return;
     id=id||('g-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
     if(sharedGoals.some(g=>g.id===id))return;
-    sharedGoals.push({id,text,from});
+    sharedGoals.push({id,text,from,completed:false});
     if(sharedGoals.length>100)sharedGoals.splice(0,sharedGoals.length-100);
     renderGoals();
     if(broadcastIt)broadcast({type:'goal',text,id,from:myPeerId});
   }
-  function goalSnapshot(){return sharedGoals.map(g=>({id:g.id,text:g.text,from:g.from}));
+  function goalSnapshot(){return sharedGoals.map(g=>({id:g.id,text:g.text,from:g.from,completed:!!g.completed}));
   }
-  function mergeGoals(list){(list||[]).forEach(g=>addGoal(g.text,g.id,g.from||'friend',false));}
+  function mergeGoals(list){(list||[]).forEach(g=>{addGoal(g.text,g.id,g.from||'friend',false);const existing=sharedGoals.find(x=>x.id===g.id);if(existing)existing.completed=!!g.completed;});renderGoals();}
+  function updateGoalState(id,completed){const g=sharedGoals.find(x=>x.id===id);if(!g)return;g.completed=!!completed;renderGoals();}
 
   function allConns(){return [...dataConns.values()].filter(c=>c&&c.open)}
   function broadcast(msg,exceptId=''){allConns().forEach(c=>{if(c.peer!==exceptId)try{c.send(msg)}catch(e){}})}
@@ -108,13 +111,15 @@
       if(m.type==='chat'){addMessage(m.text,false,m.from||'friend',m.id);}
       if(m.type==='chat-history'){(m.messages||[]).forEach(x=>addMessage(x.text,x.from===myPeerId?'me':false,x.from||'friend',x.id));}
       if(m.type==='goal')addGoal(m.text,m.id,m.from||c.peer,false);
+      if(m.type==='goal-update')updateGoalState(m.id,m.completed);
     });
     c.on('close',()=>{dataConns.delete(c.peer);removeMember(c.peer);setStatus(dataConns.size?`Connected · ${dataConns.size} connection${dataConns.size===1?'':'s'}`:'Room ready');say('Someone left the room. Their character and voice connection disappeared.');});
     c.on('error',()=>dataConns.delete(c.peer));
   }
 
   async function getMic(){
-    if(localStream)return localStream;
+    if(localStream && localStream.getAudioTracks().some(t=>t.readyState==='live'))return localStream;
+    if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Microphone is not supported here.');
     localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
     return localStream;
@@ -186,9 +191,10 @@
   $('cameraStop').onclick=stopCamera;
   function setVoiceStatus(t){$('voiceStatus').textContent=t}
   function showEndButton(on){$('voiceEnd').classList.toggle('hidden',!on)}
+  function applyMicState(){if(localStream)localStream.getAudioTracks().forEach(t=>{t.enabled=!micMuted});const b=$('voiceMute');if(b){b.textContent=micMuted?'🎙️ Unmute mic':'🔇 Mute mic';b.setAttribute('aria-pressed',String(micMuted));}}
   function stopVoiceTracks(){if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null}}
   function endVoiceWith(id){const call=voiceCalls.get(id);if(call){try{call.close()}catch(e){}voiceCalls.delete(id)}}
-  function endAllVoice(){voiceCalls.forEach(c=>{try{c.close()}catch(e){}});voiceCalls.clear();document.querySelectorAll('.remote-audio').forEach(a=>{a.srcObject=null;a.remove()});stopVoiceTracks();micMuted=false;$('voiceMute').textContent='🔇 Mute mic';showEndButton(false);setVoiceStatus(dataConns.size?'Group voice ended':'Voice call not started')}
+  function endAllVoice(){voiceCalls.forEach(c=>{try{c.close()}catch(e){}});voiceCalls.clear();document.querySelectorAll('.remote-audio').forEach(a=>{a.srcObject=null;a.remove()});stopVoiceTracks();micMuted=false;applyMicState();showEndButton(false);setVoiceStatus(dataConns.size?'Group voice ended':'Voice call not started')}
   function attachVoiceCall(call,remoteId){
     if(voiceCalls.has(remoteId)){try{voiceCalls.get(remoteId).close()}catch(e){}}
     voiceCalls.set(remoteId,call);showEndButton(true);setVoiceStatus(`🟢 Group voice · ${voiceCalls.size} connected`);
@@ -201,7 +207,7 @@
   async function startGroupVoice(){
     if(!peer||!myPeerId||!dataConns.size){setVoiceStatus('Join the same room first.');return}
     try{
-      await getMic();micMuted=false;$('voiceMute').textContent='🔇 Mute mic';
+      await getMic();applyMicState();
       const ids=[...profiles.keys()].filter(id=>id!==myPeerId);
       ids.forEach(id=>{if(!voiceCalls.has(id)){try{attachVoiceCall(peer.call(id,localStream,{metadata:{type:'study-voice'}}),id)}catch(e){}}});
       setVoiceStatus(ids.length?`🟢 Group voice · connecting to ${ids.length} people`:'No other members are connected yet.');
@@ -209,7 +215,7 @@
     }catch(e){setVoiceStatus('Microphone permission was not granted.')}
   }
   $('voiceCall').onclick=startGroupVoice;
-  $('voiceMute').onclick=()=>{if(!localStream){setVoiceStatus('Start the group voice call first.');return}micMuted=!micMuted;localStream.getAudioTracks().forEach(t=>t.enabled=!micMuted);$('voiceMute').textContent=micMuted?'🎙️ Unmute mic':'🔇 Mute mic';setVoiceStatus(micMuted?'🔴 Microphone muted':`🟢 Group voice · ${voiceCalls.size} connected`)};
+  $('voiceMute').onclick=()=>{if(!localStream||!localStream.getAudioTracks().some(t=>t.readyState==='live')){setVoiceStatus('Start the group voice call first, then mute or unmute.');return}micMuted=!micMuted;applyMicState();setVoiceStatus(micMuted?'🔴 Microphone muted — others cannot hear you':`🟢 Microphone on · ${voiceCalls.size} connected`)};
   $('voiceEnd').onclick=endAllVoice;
 
   function setupPeerEvents(){
